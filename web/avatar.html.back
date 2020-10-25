@@ -1,0 +1,739 @@
+<div id="stage">
+
+  <div id="ui" width="800" height="800">
+    <input type="text" id="msg" name="msg" maxlength="100">
+    <button onclick="draw_text();" id="send" name="send" class="btn">Send</button>
+    <button onclick="disconnect();" id="disconnect" name="disconnect" class="btn">Disconnect</button>
+    <button onclick="to_right1();" id="right1" name="right1" class="btn">Next room</button>
+  </div>
+
+  <div id="login" width="800" height="800">
+    <input type="text" id="username" name="username"/><br><br>
+    <button onclick="login();" id="login_btn" name="login_btn">Connect</button>
+  </div>
+
+  <canvas id="game" width="800" height="800"></canvas>
+  <canvas id="background" width="800" height="800"></canvas>
+
+</div>
+
+<p>This site does not hold copyright for any files and was created as an educational instance.</p>
+
+<style>
+  #stage {
+    width: 800px;
+    height: 800px;
+    position: relative;
+    border: 1px solid black;
+  }
+
+  canvas { 
+    position: absolute; 
+  }
+
+  #login_btn {
+    background-color: #FFBB33;
+    border: 1px solid black;
+    font-size: 20px;
+    font-weight: bold;
+    padding-left: 15px;
+    padding-right: 15px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .btn {
+    background-color: #fff;
+    border: 1px solid black;
+  }
+
+  #ui { 
+    z-index: 3; 
+    left: 5px; 
+    bottom: 5px; 
+    position: absolute; 
+  }
+
+  #login { 
+    z-index: 3; 
+    position: absolute;
+    text-align: center;
+    left: 300px;
+    top: 400px;
+  }
+
+  #game { 
+    z-index: 2; 
+  }
+
+  #background { 
+    z-index: 1; 
+  }
+</style>
+
+<script>
+
+//                  Todo                  \\
+//------------------------------------------
+//------------------------------------------
+//
+//[done]: Load/Cache all images first, then connect websocket, then get user list, then load room. Loading screen needed?
+//[done]: Rooms
+//*Multiple Servers
+//*Sitting Sprite when S key clicked
+//*Ability to sit in Snowcat
+//[done]: Login screen
+//*Server selection
+//[done]: limit clicks per second for penguin movement
+//[done]: minimum username length set to 2
+//*Character limit for username
+//[done]: Character limit for message
+// - above needed for server-side too
+//*Igloos, I've been delayed audio
+//*Wearable beta hat
+//*Unused puffle sprite inserted into a room
+//*Combine draw and redraw functions
+//*Remove duplicate code in mouse click handler
+//*Funny message obfuscation like ROT13 :^) or use XXTEA xD
+//*Wrap more code in functions
+//[done]: Penguin movement seems to speed up sometimes. draw_event may not be cleared properly
+//  [done]: need to ceil negative values and floor positive values
+//  maybe make directions more smoother and rotate penguin with mouse movement?
+//  maybe interface circle around player too
+//*Shorten lines of code to the JS standard
+//*Binary or msgpack protocol? Compression?
+//-hitbox to go to room
+//-join room animation?
+//-wrap message text "bubble"
+//[done]:server down error
+//[done]: handle lost connection disconnect
+//[done]: username taken
+//max room size, room full, server full?
+//------------------------------------------
+//------------------------------------------
+
+//Configurables
+
+//Sprite Config
+var sprite_height = 96;
+var sprite_width = 96;
+var shape = {x:100, y:100, width : 70, height : 80};
+
+//Movement Config
+var x2 = 100, y2 = 100;
+var dx = 0, dy = 0;
+var speed = 9;
+
+//Canvas Config
+var canvas = document.getElementById('game', {alpha: false});
+var ctx = canvas.getContext('2d');
+var height = 800;
+canvas.width = canvas.height = height;
+var draw_event = null;
+
+//Background canvas Config
+var background_canvas = document.getElementById('background', {alpha: false});
+var bg_ctx = background_canvas.getContext('2d');
+var background = new Image();
+background.src = 'background.png';
+background.onload = function(){
+    bg_ctx.drawImage(background,0,0);   
+}
+
+//Penguin Sprite Config
+var image = new Image();
+image.src = 'sprites_new.png';
+image.height = 80;
+image.width = 70;
+
+//Default Penguin facing direction
+var direction = 'south';
+
+// Default room: main
+
+//Message Logs
+var logs = ['Welcome to Experimental Penguins HTML5!'];
+
+//Penguin Sprite Frames
+var penguin_frames = {'north' : {'start_frame': 8,
+                         'frame_count': 8,
+                         'end_frame': 3},
+              'north east' : {'start_frame': 16,
+                              'frame_count': 8,
+                              'end_frame': 4},
+              'north west' : {'start_frame': 24,
+                              'frame_count': 8,
+                              'end_frame': 5},
+              'east' : {'start_frame': 32,
+                        'frame_count': 8,
+                        'end_frame': 6},
+              'west' : {'start_frame': 40,
+                        'frame_count': 8,
+                        'end_frame': 7},
+              'south east' : {'start_frame': 48,
+                              'frame_count': 8,
+                              'end_frame': 0},
+              'south west' : {'start_frame': 56,
+                              'frame_count': 8,
+                              'end_frame': 1},
+              'south' : {'start_frame': 64,
+                         'frame_count': 8,
+                         'end_frame': 2},
+              'current_frame': 0,
+              'old_direction' : null }
+
+//User related functions
+function getUser(username) {
+   for(var i = 0; i < users.length; i++) {
+      if(users[i]['username'] == username) {
+        return users[i];
+      }
+   }
+}
+
+//Network handlers
+var ws = null;
+
+//Connect to the server
+function connect() { 
+
+  ws = new WebSocket("ws://localhost:9000/");
+
+  ws.onopen = function() {
+                  console.log('Web Socket Connected!');
+                  // sendPacket({'type': 'join', 'data': my_penguin});
+                  // sendPacket({'type': 'users', 'room': my_penguin['room']});
+
+                  sendPacket({'type': 'username', 'username': my_penguin['username']});
+               };
+				
+               ws.onmessage = function (evt) { 
+                  console.log('Received: ' + evt.data);
+                  var data = JSON.parse(evt.data);
+
+                  //Packet Handlers
+
+                  if(data['type'] == 'username') {
+                       if(data['accepted']){
+
+                          sendPacket({'type': 'join', 'data': my_penguin});
+                          sendPacket({'type': 'users', 'room': my_penguin['room']});
+
+                          draw(true);
+
+                          document.getElementById('background').style.display = '';
+                          document.getElementById('ui').style.display = '';
+                          document.getElementById('login').style.display = 'none';
+                          canvas.addEventListener("click", onClick);
+                       } else {
+			  alert("Username taken");
+                          ws.close();
+		       }
+                  }
+
+                  if(data['type'] == 'users') {
+
+                    if(data['users'].length > 0) {
+                      //users = [bot, my_penguin];
+                      data['users'].forEach(user => { 
+                         users.push(user);
+                      });
+                      draw(true);
+                    }
+                  }
+
+                  if(data['type'] == 'message') {
+                    addMessage(getUser(data['username']), data['message']);
+                  }
+
+                  if(data['type'] == 'join') {
+                    users.push(data['data']);
+                    draw(true);
+                  }
+
+                  if(data['type'] == 'leave') {
+                    var user = getUser(data['username']);
+                    users = users.filter(function(value, index, arr){
+                            return value != user;
+
+                    });
+                    draw(true);
+                  }
+
+                  if(data['type'] == 'move') {
+
+                    var user = getUser(data['username']);
+                    movePenguin(user, data['x2'], data['y2']);
+                  }
+
+               };
+				
+               ws.onclose = function() { 
+                  console.log('WebSocket Closed');
+                  disconnect();
+               };
+
+	       ws.onerror=function(event){
+                   alert("Could not connect to server..");
+               }
+}
+
+//Disconnect from the server and redraw login screen
+function disconnect() {
+
+  canvas.removeEventListener("click", onClick);
+  clearTimeout(draw_event);
+  ws.close();
+
+  ctx.clearRect(0, 0, height, height);
+
+  document.getElementById('right1').onclick = to_right1;
+  document.getElementById('right1').innerHTML = 'Next Room';
+
+  drawLogin();
+
+}
+
+function sendPacket(data) {
+   var packed = JSON.stringify(data);
+   ws.send(packed);
+   console.log('Sent: ' + packed);
+}
+
+//Room Config
+var users = []
+var rooms = []
+
+var bot = createPenguin('Bot');
+bot['shape']['x'] = 300;
+bot['shape']['y'] = 300
+
+var my_penguin = null;
+
+//Create a new penguin object
+function createPenguin(username) {
+   var penguin = {};
+   penguin['username'] = username;
+   penguin['current_frame'] = 0;
+   penguin['shape'] = Object.assign({}, shape);
+   penguin['direction'] = 'south';
+   penguin['steps'] = 0;
+   penguin['dx'] = 0;
+   penguin['dy'] = 0;
+   penguin['room'] = 'main';
+   console.log('Penguin', penguin);
+
+   return penguin;
+}
+
+//Messaging functions
+
+var my_msg_timeout;
+
+function addMessage(user, message) {
+  logs.push(user['username'] + ': ' + message);
+
+  redraw();
+
+  user['message'] = message;
+
+  drawMessageBubble(user);
+
+  setTimeout(removeMessage, 3000, user);
+}
+
+//Clears a user's message
+//This should be renamed to clearMessage
+function removeMessage(user) {
+   user['message'] = null;
+   draw(true);
+}
+
+function draw_text(){ 
+  var text = document.getElementById('msg').value;
+
+  if(!text) {
+    console.log("Empty message box input!");
+    return;
+  }
+
+  if(text.length > 100) {
+    console.log("Message too long!");
+    return;
+  }
+
+  logs.push(my_penguin.username + ': ' + text);
+
+  clearTimeout(my_msg_timeout);
+
+  my_penguin['message'] = '';
+
+  redraw();
+
+  my_penguin['message'] = text;
+
+  drawMessageBubble(my_penguin);
+
+  sendPacket({'type': 'message', 'message': text, 'username': my_penguin['username'], 'room': my_penguin['room']});
+  my_msg_timeout = setTimeout(removeMessage, 3000, my_penguin);
+
+  document.getElementById('msg').value = '';
+}
+
+function drawMessageBubble(user) {
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(user['message'], Math.floor(user['shape'].x + (image.width / 2)), user['shape'].y - 10);
+  ctx.restore();
+   
+}
+
+//Message log function
+function draw_logs() {
+
+  ctx.fillStyle = "#000000";
+
+  if(logs.length > 10) {
+    logs.shift();
+  }
+
+  for(var i = logs.length - 1; i >= 0; i--) {
+    ctx.fillText(logs[i], 40, 20 + i*10);
+
+  }
+}
+
+//Core functions
+function clear() {
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+function redraw() {
+    ctx.clearRect(0,0,height,height);
+    ctx.save();
+    
+    users.forEach(user => {
+      ctx.drawImage(image, animationDone(user['direction']) * sprite_width, 0, sprite_width, sprite_height, user['shape'].x, user['shape'].y, user['shape'].width, user['shape'].height);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(user['username'], Math.floor(user['shape'].x + (image.width / 2)), user['shape'].y + user['shape'].height + 15);
+      ctx.strokeStyle = "black";
+
+      if(user['message']) {
+        drawMessageBubble(user);
+      }
+
+    });
+
+    ctx.restore();
+    draw_logs();
+}
+
+
+// clear message clear handlers on room switch
+
+function nextFrame(user) {
+
+   if(user['old_direction'] != user['direction']) { 
+      user['old_direction'] = user['direction'];
+      user['current_frame'] = 0;
+   }
+
+   if(user['current_frame'] == penguin_frames[user['direction']]['frame_count'] + penguin_frames[user['direction']]['start_frame'] - 1) {
+      user['current_frame'] = 0;
+   }
+
+   if(user['current_frame'] == 0) {
+      user['current_frame'] = penguin_frames[user['direction']]['start_frame'];
+      return user['current_frame'];    
+   }
+
+   user['current_frame']++;
+   return user['current_frame'];
+
+}
+
+function animationDone(direction) {
+   return penguin_frames[direction]['end_frame'];
+}
+
+function distance(x2, y2, x, y) {
+   return Math.sqrt(Math.pow(x2 - x, 2) + Math.pow(y2 - y, 2))
+}
+
+function hasSteps(user) {
+  if(user['steps'] > 0) {
+    return true;
+  }
+}
+
+function draw(force){
+
+    if(draw_event) {
+      clearTimeout(draw_event);
+    }
+
+    if(force == true || users.some(hasSteps)){ 
+
+       ctx.clearRect(0, 0, height, height);
+       ctx.save();
+
+       users.forEach(user => { 
+         if(user['steps'] > 0) {
+
+           user['shape'].x = user['shape'].x + user['dx'];
+           user['shape'].y = user['shape'].y + user['dy'];
+           user['steps']--;
+
+           ctx.drawImage(image, nextFrame(user) * sprite_width, 0, sprite_width, sprite_height, user['shape'].x, user['shape'].y, user['shape'].width, user['shape'].height);
+         } else {
+           ctx.drawImage(image, animationDone(user['direction']) * sprite_width, 0, sprite_width, sprite_height, user['shape'].x, user['shape'].y, user['shape'].width, user['shape'].height);
+         }
+
+         ctx.textAlign = 'center';
+         ctx.textBaseline = 'middle';
+         ctx.fillText(user['username'], Math.floor(user['shape'].x + (image.width / 2)), user['shape'].y + user['shape'].height + 15);
+
+         if(user['message']) {
+           drawMessageBubble(user);
+         }
+
+       });
+
+       ctx.restore();
+       draw_logs();
+
+       draw_event = setTimeout(draw,50);
+
+    } else {
+      redraw();
+    }
+}
+
+function getDirection(angle) {
+
+  if(angle <= 0 + 20 && angle >= 0 - 20) {
+    return 'east';
+  }
+
+  if(angle <= 90 + 20 && angle >= 90 - 20) {
+   return 'south';
+  }
+
+  if(angle <= 180 + 20 && angle >= 180 - 20) {
+   return 'west';
+  }
+
+  if(angle <= 270 + 20 && angle >= 270 - 20) {
+   return 'north';
+  }
+
+  if(angle > 0 && angle < 90) {
+    return 'south east';
+  }
+
+  if(angle > 90 && angle < 180) {
+    return 'south west';
+  }
+
+  if(angle > 180 && angle < 270) {
+    return 'north west';
+  }
+  if(angle > 90 && angle < 360) {
+    return 'north east';
+  }
+
+}
+
+function movePenguin(user, x2, y2) {
+
+    var angle = Math.atan2(y2 - user['shape'].y - 40, x2 - user['shape'].x - 25)
+
+    user['dx'] = speed * Math.cos(angle)
+    user['dy'] = speed * Math.sin(angle)
+
+    if(user['dx'] > 0) {
+      user['dx'] = Math.floor(user['dx'])
+    } else {
+      user['dx'] = Math.ceil(user['dx'])
+    }
+
+    if(user['dy'] > 0) {
+      user['dy'] = Math.floor(user['dy'])
+    } else {
+      user['dy'] = Math.ceil(user['dy'])
+    }
+
+    user['steps'] = Math.floor(distance(x2 - 35, y2 - 40, user['shape'].x, user['shape'].y) / Math.sqrt(Math.pow(user['dx'], 2) + Math.pow(user['dy'], 2)));
+
+    console.log('Steps Left:', user['steps']);
+    console.log('dx', user['dx'], 'dy', user['dy']);
+
+    var theta_radians = Math.atan2(y2 - user['shape'].y - 40, x2 - user['shape'].x - 25)
+
+    angle = theta_radians * (180/Math.PI);
+
+    if(angle < 0) {
+      angle += 360;
+    }
+
+    user['direction'] = getDirection(angle);
+
+    draw(false);
+
+    console.log(getDirection(angle));
+
+}
+
+function onClick(e) {
+
+    x2 = e.clientX;
+    y2 = e.clientY;
+
+    //Remove this duplicate code by function
+    var angle = Math.atan2(y2 - my_penguin['shape'].y - 40, x2 - my_penguin['shape'].x - 25)
+
+    my_penguin['dx'] = speed * Math.cos(angle)
+    my_penguin['dy'] = speed * Math.sin(angle)
+
+    if(my_penguin['dx'] > 0) {
+      my_penguin['dx'] = Math.floor(my_penguin['dx'])
+    } else {
+      my_penguin['dx'] = Math.ceil(my_penguin['dx'])
+    }
+
+    if(my_penguin['dy'] > 0) {
+      my_penguin['dy'] = Math.floor(my_penguin['dy'])
+    } else {
+      my_penguin['dy'] = Math.ceil(my_penguin['dy'])
+    }
+
+    console.log(speed * Math.cos(angle), speed * Math.sin(angle))
+
+    var steps = Math.floor(distance(x2 - 35, y2 - 40, my_penguin['shape'].x, my_penguin['shape'].y) / Math.sqrt(Math.pow(my_penguin['dx'], 2) + Math.pow(my_penguin['dy'], 2)));
+    //---end---Remove this duplicate code by function
+
+    var f_x2 = my_penguin['shape'].x + my_penguin['dx'] * steps
+    var f_y2 = my_penguin['shape'].y + my_penguin['dy'] * steps
+
+    var theta_radians = Math.atan2(y2 - my_penguin['shape'].y - 40, x2 - my_penguin['shape'].x - 25)
+
+    angle = theta_radians * (180/Math.PI);
+
+    if(angle < 0) {
+      angle += 360;
+    }
+
+    sendPacket({'type': 'move', 'username': my_penguin['username'], 'x2' : x2, 'y2': y2, 'sx2': f_x2, 'sy2': f_y2, direction: getDirection(angle), 'room': my_penguin['room']});
+    movePenguin(my_penguin, x2, y2);
+
+    //Clicking rate limited to half a second
+    canvas.removeEventListener("click", onClick);
+    setTimeout(function() {     canvas.addEventListener("click", onClick); }, 500);
+    return;
+
+}
+
+function drawLogin() {
+
+  document.getElementById('ui').style.display = 'none';
+  document.getElementById('background').style.display = 'none';
+  document.getElementById('login').style.display = '';
+ 
+  var text = 'Please enter a penguin name!'
+  var logo = new Image();
+
+  logo.src = 'logo.jpg';
+  logo.onload = function(){
+
+    ctx.drawImage(logo, canvas.width / 2 - logo.width / 2, 0);   
+
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 - 20);
+    ctx.restore();
+
+  }
+
+}
+
+function login() {
+
+  var username = document.getElementById('username').value;
+
+  if(username.length > 1) {
+
+    my_penguin = createPenguin(username);
+    users = [bot, my_penguin]
+
+    connect();
+
+  } else {
+    alert("Username must be at least 2 letters long");
+  }
+}
+
+function to_right1() {
+    // move to right room
+    my_penguin['room'] = 'right1'
+    users = [bot, my_penguin];
+
+    clearTimeout(draw_event);
+    clearTimeout(my_msg_timeout);
+
+
+    if(my_penguin['steps'] > 0) {
+       for(i = 0; i < my_penguin['steps']; i++){
+           my_penguin['shape'].x = my_penguin['shape'].x + my_penguin['dx'];
+           my_penguin['shape'].y = my_penguin['shape'].y + my_penguin['dy'];
+       }
+       my_penguin['steps'] = 0;
+    }
+
+    my_penguin['message'] = '';
+
+    document.getElementById('right1').onclick = to_main;
+    document.getElementById('right1').innerHTML = 'Previous Room';
+
+    draw(true);
+    sendPacket({'type': 'join', 'data': my_penguin});
+    sendPacket({'type': 'users', 'room': my_penguin['room']});
+
+}
+
+function to_main() {
+    // move to main room
+
+    my_penguin['room'] = 'main'
+    users = [bot, my_penguin];
+
+    clearTimeout(draw_event);
+    clearTimeout(my_msg_timeout);
+
+
+    if(my_penguin['steps'] > 0) {
+       for(i = 0; i < my_penguin['steps']; i++){
+           my_penguin['shape'].x = my_penguin['shape'].x + my_penguin['dx'];
+           my_penguin['shape'].y = my_penguin['shape'].y + my_penguin['dy'];
+       }
+       my_penguin['steps'] = 0;
+    }
+
+    my_penguin['message'] = '';
+
+    document.getElementById('right1').onclick = to_right1;
+    document.getElementById('right1').innerHTML = 'Next Room';
+
+    draw(true);
+    sendPacket({'type': 'join', 'data': my_penguin});
+    sendPacket({'type': 'users', 'room': my_penguin['room']});
+    
+}
+
+drawLogin();
+
+</script>
