@@ -12,3 +12,8 @@ python3 -m http.server 8080
 ```
 
 ![Image of Experimental Penguins running](/epeng_screenshot.png)
+
+Problems:
+```
+- the redrawing is not smooth if there is too many penguins in the room.
+```
