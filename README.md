@@ -6,7 +6,7 @@ To run the server:
 python3 server.py
 ```
 
-To run the webserver youcan upload everything in web/ to a webserver or
+To run the client you can upload everything in web/ to a webserver or
 ```
 python3 -m http.server 8080
 ```
