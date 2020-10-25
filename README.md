@@ -10,3 +10,5 @@ To run the webserver youcan upload everything in web/ to a webserver or
 ```
 python3 -m http.server 8080
 ```
+
+![Image of Experimental Penguins running](/epeng_screenshot.png)
