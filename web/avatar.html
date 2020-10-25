@@ -100,7 +100,7 @@
 //*Server selection
 //[done]: limit clicks per second for penguin movement
 //[done]: minimum username length set to 2
-//*Character limit for username
+//[done]:Character limit for username
 //[done]: Character limit for message
 // - above needed for server-side too
 //*Igloos, I've been delayed audio
@@ -240,7 +240,11 @@ function connect() {
                           document.getElementById('login').style.display = 'none';
                           canvas.addEventListener("click", onClick);
                        } else {
-			  alert("Username taken");
+			  if(data['error'].includes("taken")) {
+				  alert("Username taken");
+			  } else {
+				  alert("Username too long! (15 characters max)");
+			  }
                           ws.close();
 		       }
                   }
