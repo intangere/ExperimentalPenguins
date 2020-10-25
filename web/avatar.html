@@ -233,7 +233,7 @@ function connect() {
                           sendPacket({'type': 'join', 'data': my_penguin});
                           sendPacket({'type': 'users', 'room': my_penguin['room']});
 
-                          draw(true);
+                          should_draw(true);
 
                           document.getElementById('background').style.display = '';
                           document.getElementById('ui').style.display = '';
@@ -252,7 +252,7 @@ function connect() {
                       data['users'].forEach(user => { 
                          users.push(user);
                       });
-                      draw(true);
+                      should_draw(true);
                     }
                   }
 
@@ -262,7 +262,7 @@ function connect() {
 
                   if(data['type'] == 'join') {
                     users.push(data['data']);
-                    draw(true);
+                    should_draw(true);
                   }
 
                   if(data['type'] == 'leave') {
@@ -271,7 +271,7 @@ function connect() {
                             return value != user;
 
                     });
-                    draw(true);
+                    should_draw(true);
                   }
 
                   if(data['type'] == 'move') {
@@ -297,7 +297,10 @@ function disconnect() {
 
   canvas.removeEventListener("click", onClick);
   clearTimeout(draw_event);
+  clearTimeout(my_msg_timeout);
+  draw_event = null;
   ws.close();
+  logs = ['Welcome to Experimental Penguins HTML5!'];
 
   ctx.clearRect(0, 0, height, height);
 
@@ -355,7 +358,7 @@ var my_msg_timeout;
 function addMessage(user, message) {
   logs.push(user['username'] + ': ' + message);
 
-  redraw();
+  should_redraw();
 
   user['message'] = message;
 
@@ -368,7 +371,7 @@ function addMessage(user, message) {
 //This should be renamed to clearMessage
 function removeMessage(user) {
    user['message'] = null;
-   draw(true);
+   should_draw(true);
 }
 
 function draw_text(){ 
@@ -390,7 +393,7 @@ function draw_text(){
 
   my_penguin['message'] = '';
 
-  redraw();
+  should_redraw();
 
   my_penguin['message'] = text;
 
@@ -419,7 +422,9 @@ function draw_logs() {
   ctx.fillStyle = "#000000";
 
   if(logs.length > 10) {
-    logs.shift();
+    while(logs.length > 10) {
+	    logs.shift();
+    }
   }
 
   for(var i = logs.length - 1; i >= 0; i--) {
@@ -493,11 +498,32 @@ function hasSteps(user) {
   }
 }
 
+function should_draw(force) {
+    if(draw_event != null) {
+      console.log("Draw event still running");
+      return;
+    } else {
+      clearTimeout(draw_event);
+      draw(force);
+    }
+}
+
+function should_redraw(force) {
+    if(draw_event != null) {
+      console.log("Draw event still running");
+      return;
+    } else {
+      clearTimeout(draw_event);
+      redraw();
+    }
+}
+
 function draw(force){
 
-    if(draw_event) {
-      clearTimeout(draw_event);
-    }
+    //if(draw_event != null) {
+    //  return;
+    //  clearTimeout(draw_event);
+    //}
 
     if(force == true || users.some(hasSteps)){ 
 
@@ -532,6 +558,8 @@ function draw(force){
        draw_event = setTimeout(draw,50);
 
     } else {
+      clearTimeout(draw_event);
+      draw_event = null;
       redraw();
     }
 }
@@ -605,7 +633,7 @@ function movePenguin(user, x2, y2) {
 
     user['direction'] = getDirection(angle);
 
-    draw(false);
+    should_draw(false);
 
     console.log(getDirection(angle));
 
@@ -712,7 +740,7 @@ function to_right1() {
 
     clearTimeout(draw_event);
     clearTimeout(my_msg_timeout);
-
+    draw_event=null;
 
     if(my_penguin['steps'] > 0) {
        for(i = 0; i < my_penguin['steps']; i++){
@@ -727,7 +755,7 @@ function to_right1() {
     document.getElementById('right1').onclick = to_main;
     document.getElementById('right1').innerHTML = 'Previous Room';
 
-    draw(true);
+    should_draw(true);
     sendPacket({'type': 'join', 'data': my_penguin});
     sendPacket({'type': 'users', 'room': my_penguin['room']});
 
@@ -741,7 +769,7 @@ function to_main() {
 
     clearTimeout(draw_event);
     clearTimeout(my_msg_timeout);
-
+    draw_event = null;
 
     if(my_penguin['steps'] > 0) {
        for(i = 0; i < my_penguin['steps']; i++){
@@ -756,7 +784,7 @@ function to_main() {
     document.getElementById('right1').onclick = to_right1;
     document.getElementById('right1').innerHTML = 'Next Room';
 
-    draw(true);
+    should_draw(true);
     sendPacket({'type': 'join', 'data': my_penguin});
     sendPacket({'type': 'users', 'room': my_penguin['room']});
     

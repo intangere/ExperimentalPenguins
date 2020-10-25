@@ -12,8 +12,11 @@ python3 -m http.server 8080
 ```
 
 ![Image of Experimental Penguins running](/epeng_screenshot.png)
+200 Penguins running smoothly in one room
+![Image of Experimental Penguins running](/epeng_screenshot_2.png)
 
 Problems:
 ```
-- the redrawing is not smooth if there is too many penguins in the room.
+- [done]: the redrawing is not smooth if there is too many penguins in the room.
+- incorrect penguin positioning on switching rooms mid draw?
 ```
