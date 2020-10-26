@@ -759,7 +759,7 @@ function to_right1() {
     document.getElementById('right1').onclick = to_main;
     document.getElementById('right1').innerHTML = 'Previous Room';
 
-    should_draw(true);
+    draw(true);
     sendPacket({'type': 'join', 'data': my_penguin});
     sendPacket({'type': 'users', 'room': my_penguin['room']});
 
@@ -788,7 +788,7 @@ function to_main() {
     document.getElementById('right1').onclick = to_right1;
     document.getElementById('right1').innerHTML = 'Next Room';
 
-    should_draw(true);
+    draw(true);
     sendPacket({'type': 'join', 'data': my_penguin});
     sendPacket({'type': 'users', 'room': my_penguin['room']});
     
