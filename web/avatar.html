@@ -131,7 +131,7 @@
 //Sprite Config
 var sprite_height = 96;
 var sprite_width = 96;
-var shape = {x:100, y:100, width : 70, height : 80};
+var shape = {x:100, y:100, width : 75, height : 80};
 
 //Movement Config
 var x2 = 100, y2 = 100;
@@ -471,14 +471,14 @@ function nextFrame(user) {
 
    if(user['old_direction'] != user['direction']) { 
       user['old_direction'] = user['direction'];
-      user['current_frame'] = 0;
+      user['current_frame'] = -1;
    }
 
    if(user['current_frame'] == penguin_frames[user['direction']]['frame_count'] + penguin_frames[user['direction']]['start_frame'] - 1) {
-      user['current_frame'] = 0;
+      user['current_frame'] = -1;
    }
 
-   if(user['current_frame'] == 0) {
+   if(user['current_frame'] == -1) {
       user['current_frame'] = penguin_frames[user['direction']]['start_frame'];
       return user['current_frame'];    
    }

@@ -20,4 +20,6 @@ Problems:
 - [done]: the redrawing is not smooth if there is too many penguins in the room.
 - incorrect penguin positioning on switching rooms mid draw?
 - message "bubbles" need to be drawn last or penguins get drawn ontop of them.
+- penguin size is injectable thus being changed
+- same with position. 
 ```
